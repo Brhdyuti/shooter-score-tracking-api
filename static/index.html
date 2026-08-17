@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Shooter Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; background: #f4f5f7; margin: 0; padding: 30px; }
+  h1 { color: #1a1a2e; }
+  .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  select { padding: 8px 12px; font-size: 15px; border-radius: 6px; border: 1px solid #ccc; }
+  .cards { display: flex; gap: 16px; margin-bottom: 30px; flex-wrap: wrap; }
+  .card { background: white; border-radius: 10px; padding: 20px 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); flex: 1; min-width: 150px; }
+  .card h3 { margin: 0 0 8px 0; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card .value { font-size: 28px; font-weight: bold; color: #1a1a2e; }
+  .chart-container { background: white; border-radius: 10px; padding: 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  .empty { color: #888; font-style: italic; }
+  .targets-section { margin-top: 30px; }
+  .target-card { background: white; border-radius: 10px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 20px; }
+  .target-card img { width: 100px; height: auto; border-radius: 6px; }
+  .target-card .info { flex: 1; }
+</style>
+</head>
+<body>
+
+<h1>🎯 Shooter Score Dashboard</h1>
+
+<div class="top-bar">
+  <label for="shooterSelect"><b>Select Shooter:</b></label>
+  <select id="shooterSelect"></select>
+</div>
+
+<div class="cards" id="statsCards"></div>
+
+<div class="chart-container">
+  <canvas id="scoreChart" height="90"></canvas>
+</div>
+
+<div class="targets-section">
+  <h2>Sessions & Targets Used</h2>
+  <div id="targetsList"></div>
+</div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+let chart = null;
+
+async function loadShooters() {
+  const res = await fetch(`${API_BASE}/shooters`);
+  const shooters = await res.json();
+  const select = document.getElementById("shooterSelect");
+  select.innerHTML = "";
+  shooters.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.name} (id: ${s.id})`;
+    select.appendChild(opt);
+  });
+  if (shooters.length > 0) {
+    loadShooterData(shooters[0].id);
+  }
+  select.addEventListener("change", (e) => loadShooterData(e.target.value));
+}
+
+async function loadShooterData(shooterId) {
+  const statsRes = await fetch(`${API_BASE}/shooters/${shooterId}/stats`);
+  const stats = await statsRes.json();
+
+  const cardsDiv = document.getElementById("statsCards");
+
+  if (stats.message) {
+    cardsDiv.innerHTML = `<div class="card"><p class="empty">No scores recorded yet for this shooter.</p></div>`;
+    if (chart) { chart.destroy(); chart = null; }
+    document.getElementById("targetsList").innerHTML = "";
+    return;
+  }
+
+  cardsDiv.innerHTML = `
+    <div class="card"><h3>Sessions</h3><div class="value">${stats.total_sessions}</div></div>
+    <div class="card"><h3>Scores Logged</h3><div class="value">${stats.total_scores_recorded}</div></div>
+    <div class="card"><h3>Average %</h3><div class="value">${stats.average_percentage}%</div></div>
+    <div class="card"><h3>Best %</h3><div class="value">${stats.best_percentage}%</div></div>
+    <div class="card"><h3>Worst %</h3><div class="value">${stats.worst_percentage}%</div></div>
+  `;
+
+  const detailRes = await fetch(`${API_BASE}/shooters/${shooterId}/scores-detail`);
+  const details = await detailRes.json();
+
+  const labels = details.map((d, i) => `${d.date} (T${d.target_number})`);
+  const dataPoints = details.map(d => d.percentage);
+
+  const sessionsRes = await fetch(`${API_BASE}/shooters/${shooterId}/sessions-detail`);
+  const sessions = await sessionsRes.json();
+  const targetsListDiv = document.getElementById("targetsList");
+
+  if (sessions.length === 0) {
+    targetsListDiv.innerHTML = `<p class="empty">No sessions yet.</p>`;
+  } else {
+    targetsListDiv.innerHTML = sessions.map(s => `
+      <div class="target-card">
+        ${s.target_design_id ? `<img src="${API_BASE}/target-designs/${s.target_design_id}/image" />` : ''}
+        <div class="info">
+          <b>${s.date}</b> — ${s.discipline}<br/>
+          ${s.target_design_name ? `Target: ${s.target_design_name}` : 'No target design linked'}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  const ctx = document.getElementById("scoreChart").getContext("2d");
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "Score %",
+        data: dataPoints,
+        borderColor: "#4169E1",
+        backgroundColor: "rgba(65,105,225,0.15)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+      }]
+    },
+    options: {
+      scales: { y: { min: 0, max: 100 } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+loadShooters();
+</script>
+
+</body>
+</html>

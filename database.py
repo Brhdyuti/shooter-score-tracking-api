@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Date
+from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Date, DateTime
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 DATABASE_URL = "sqlite:///./shooters.db"
@@ -24,13 +24,14 @@ class PracticeSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     shooter_id = Column(Integer, ForeignKey("shooters.id"), nullable=False)
+    target_design_id = Column(Integer, ForeignKey("target_designs.id"), nullable=True)
     date = Column(Date, nullable=False)
     discipline = Column(String, nullable=False)
     notes = Column(String, nullable=True)
 
     shooter = relationship("Shooter", back_populates="sessions")
     scores = relationship("Score", back_populates="session")
-
+    target_design = relationship("TargetDesign")
 
 class Score(Base):
     __tablename__ = "scores"
@@ -44,5 +45,12 @@ class Score(Base):
     session = relationship("PracticeSession", back_populates="scores")
 
 
+class TargetDesign(Base):
+    __tablename__ = "target_designs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    diameter_cm = Column(Float, nullable=False)
+    num_rings = Column(Integer, nullable=False)
 def init_db():
     Base.metadata.create_all(bind=engine)
